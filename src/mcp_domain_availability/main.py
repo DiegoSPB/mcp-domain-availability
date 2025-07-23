@@ -328,8 +328,8 @@ async def check_domain(domain_query: str) -> Dict:
             "error": "Please use --domain flag. Example: 'mysite.com --domain' or 'mysite --domain'"
         }
     
-    # Parse TLD filter if provided
-    filter_tlds = None
+    # Parse TLD filter if provided, otherwise default to ai and com
+    filter_tlds = ["ai", "com"]  # Default TLDs
     if '--tlds' in domain_query:
         parts = domain_query.split('--tlds')
         if len(parts) > 1:
