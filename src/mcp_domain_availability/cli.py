@@ -2,15 +2,25 @@
 
 import sys
 import json
+import argparse
 from mcp_domain_availability.main import check_domain
 
 def main():
+    parser = argparse.ArgumentParser(description='Check domain availability')
+    parser.add_argument('domain_name', help='Domain to check')
+    parser.add_argument('--domain', action='store_true', required=True, help='Domain check flag')
+    parser.add_argument('--tlds', nargs='+', help='Specific TLDs to check (e.g., --tlds com ai tech)')
+    
     if len(sys.argv) < 2:
-        print("Usage: mcp-domain-availability-cli <domain> --domain")
-        print("Example: mcp-domain-availability-cli mysite.com --domain")
+        parser.print_help()
         return
     
-    domain_query = " ".join(sys.argv[1:])
+    args = parser.parse_args()
+    
+    domain_query = f"{args.domain_name} --domain"
+    if args.tlds:
+        domain_query += f" --tlds {' '.join(args.tlds)}"
+    
     result = check_domain(domain_query)
     print(json.dumps(result, indent=2))
 

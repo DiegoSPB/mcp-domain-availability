@@ -227,8 +227,20 @@ async def check_multiple_domains(base_name: str, tlds: List[str]) -> List[Dict]:
     
     return valid_results
 
-async def run_domain_checks(domain_part: str) -> Dict:
+async def run_domain_checks(domain_part: str, filter_tlds: Optional[List[str]] = None) -> Dict:
     base_name, existing_tld = extract_domain_parts(domain_part)
+    
+    # Use filtered TLDs if provided, otherwise use all TLDs
+    tlds_to_check = ALL_TLDS
+    if filter_tlds:
+        # Validate that requested TLDs are supported
+        valid_filter_tlds = [tld.lower() for tld in filter_tlds if tld.lower() in ALL_TLDS]
+        if valid_filter_tlds:
+            tlds_to_check = valid_filter_tlds
+        else:
+            return {
+                "error": f"None of the requested TLDs {filter_tlds} are supported. Available TLDs: {', '.join(sorted(ALL_TLDS))}"
+            }
     
     results = {
         "requested_domain": None,
@@ -236,11 +248,12 @@ async def run_domain_checks(domain_part: str) -> Dict:
         "unavailable_domains": [],
         "invalid_domains": [],
         "total_checked": 0,
-        "check_summary": {}
+        "check_summary": {},
+        "filtered_tlds": filter_tlds if filter_tlds else None
     }
     
     invalid_for_tlds = []
-    for tld in ALL_TLDS:
+    for tld in tlds_to_check:
         if not is_valid_domain_name(base_name, tld):
             min_length = get_min_length_for_tld(tld)
             invalid_for_tlds.append({
@@ -259,12 +272,13 @@ async def run_domain_checks(domain_part: str) -> Dict:
         exact_result = await check_domain_availability(f"{base_name}.{existing_tld}")
         results["requested_domain"] = exact_result
         
-        other_tlds = [tld for tld in ALL_TLDS if tld != existing_tld]
+        # Only check other TLDs if they're in the filter or no filter is applied
+        other_tlds = [tld for tld in tlds_to_check if tld != existing_tld]
         all_results = await check_multiple_domains(base_name, other_tlds)
         if exact_result.get('valid', True):
             all_results.append(exact_result)
     else:
-        all_results = await check_multiple_domains(base_name, ALL_TLDS)
+        all_results = await check_multiple_domains(base_name, tlds_to_check)
     
     for result in all_results:
         if result.get('available'):
@@ -301,9 +315,10 @@ async def check_domain(domain_query: str) -> Dict:
     - "mysite.com --domain" - checks exact domain
     - "mysite --domain" - checks mysite across all popular TLDs
     - "test.io --domain" - checks test.io exactly, plus test across all TLDs
+    - "mysite --domain --tlds com ai tech" - checks only .com, .ai, and .tech TLDs
     
     Args:
-        domain_query (str): Domain to check with --domain flag
+        domain_query (str): Domain to check with --domain flag and optional --tlds filter
         
     Returns:
         Dict containing availability results for the domain and suggested alternatives
@@ -312,6 +327,16 @@ async def check_domain(domain_query: str) -> Dict:
         return {
             "error": "Please use --domain flag. Example: 'mysite.com --domain' or 'mysite --domain'"
         }
+    
+    # Parse TLD filter if provided
+    filter_tlds = None
+    if '--tlds' in domain_query:
+        parts = domain_query.split('--tlds')
+        if len(parts) > 1:
+            tld_part = parts[1].strip()
+            if tld_part:
+                filter_tlds = tld_part.split()
+        domain_query = parts[0]  # Keep only the part before --tlds
     
     domain_part = domain_query.replace('--domain', '').strip()
     
@@ -328,7 +353,7 @@ async def check_domain(domain_query: str) -> Dict:
         }
     
     try:
-        return await run_domain_checks(domain_part)
+        return await run_domain_checks(domain_part, filter_tlds)
     except Exception as e:
         return {
             "error": f"Failed to check domain: {str(e)}"
